@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeveAgro - Calculadora NPK</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f9f9f9; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: #2c5530; margin-bottom: 5px; }
+        h1 span { font-size: 14px; color: #666; font-weight: normal; }
+        .controls { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .row { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 15px; }
+        .field { flex: 1; min-width: 150px; }
+        .field label { display: block; margin-bottom: 5px; font-size: 12px; color: #666; }
+        .field select, .field input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        button { padding: 12px 30px; background: #2c5530; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        button:hover { background: #3d7042; }
+        button:disabled { background: #ccc; }
+        .result { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .result-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        .result-item { padding: 15px; background: #f5f5f5; border-radius: 4px; }
+        .result-item .label { font-size: 12px; color: #666; margin-bottom: 5px; }
+        .result-item .value { font-size: 20px; font-weight: bold; color: #2c5530; }
+        .result-item .value.total { font-size: 28px; color: #1a3a1f; }
+        .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .chart { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .breakdown { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .breakdown h3 { margin-top: 0; color: #333; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f5f5f5; font-size: 12px; color: #666; }
+        .loading { text-align: center; padding: 40px; color: #666; }
+        @media (max-width: 768px) {
+            .charts { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>LeveAgro <span>Precificacao de Fertilizantes</span></h1>
+
+        <div class="controls">
+            <div class="row">
+                <div class="field">
+                    <label>Formula NPK</label>
+                    <select id="formula">
+                        <option value="NPK 04-14-08">NPK 04-14-08</option>
+                        <option value="NPK 10-10-10">NPK 10-10-10</option>
+                        <option value="NPK 20-00-20">NPK 20-00-20</option>
+                        <option value="NPK 05-25-25">NPK 05-25-25</option>
+                        <option value="NPK 00-20-20">NPK 00-20-20</option>
+                        <option value="NPK 08-20-20">NPK 08-20-20</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Quantidade (ton)</label>
+                    <input type="number" id="quantidade" value="1000" min="1">
+                </div>
+                <div class="field">
+                    <label>Embalagem</label>
+                    <select id="embalagem">
+                        <option value="GRANEL">Granel</option>
+                        <option value="BIGBAG">Big Bag (+R$78)</option>
+                        <option value="SACO50">Saco 50kg (+R$100)</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Distancia (km)</label>
+                    <input type="number" id="distancia" value="1500" min="0">
+                </div>
+            </div>
+            <div class="row">
+                <div class="field">
+                    <label>Prazo (dias)</label>
+                    <input type="number" id="prazo" value="0" min="0">
+                </div>
+                <div class="field">
+                    <label>Spread CDI (%)</label>
+                    <input type="number" id="spread" value="2.0" step="0.1">
+                </div>
+                <div class="field">
+                    <label>Horizonte Simulacao (meses)</label>
+                    <input type="number" id="horizonte" value="12" min="1" max="36">
+                </div>
+                <div class="field" style="display: flex; align-items: flex-end;">
+                    <button onclick="calcular()" id="btnCalc">Calcular</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="result" id="resultArea" style="display:none;">
+            <div class="result-grid">
+                <div class="result-item">
+                    <div class="label">Preco Base (USD/ton)</div>
+                    <div class="value" id="precoUSD">-</div>
+                </div>
+                <div class="result-item">
+                    <div class="label">Preco Base (BRL/ton)</div>
+                    <div class="value" id="precoBRL">-</div>
+                </div>
+                <div class="result-item">
+                    <div class="label">Preco Final (BRL/ton)</div>
+                    <div class="value" id="precoFinal">-</div>
+                </div>
+                <div class="result-item">
+                    <div class="label">Total Pedido</div>
+                    <div class="value total" id="precoTotal">-</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="breakdown" id="breakdownArea" style="display:none;">
+            <h3>Composicao e Custos</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Valor</th>
+                        <th>Descricao</th>
+                    </tr>
+                </thead>
+                <tbody id="breakdownTable"></tbody>
+            </table>
+        </div>
+
+        <div class="charts">
+            <div class="chart">
+                <div id="fanchart"></div>
+            </div>
+            <div class="chart">
+                <div id="histogram"></div>
+            </div>
+        </div>
+
+        <div class="loading" id="loading" style="display:none;">Calculando simulacao...</div>
+    </div>
+
+    <script>
+        const API = '';
+
+        async function calcular() {
+            const btn = document.getElementById('btnCalc');
+            btn.disabled = true;
+            btn.textContent = 'Calculando...';
+
+            try {
+                // Cotacao
+                const cotacaoReq = {
+                    formula: document.getElementById('formula').value,
+                    quantidade_ton: parseFloat(document.getElementById('quantidade').value),
+                    embalagem: document.getElementById('embalagem').value,
+                    distancia_km: parseFloat(document.getElementById('distancia').value),
+                    dias_prazo: parseInt(document.getElementById('prazo').value),
+                    spread_cdi: parseFloat(document.getElementById('spread').value)
+                };
+
+                const cotacaoRes = await fetch(API + '/api/cotacao', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(cotacaoReq)
+                });
+                const cotacao = await cotacaoRes.json();
+
+                // Mostrar resultados
+                document.getElementById('resultArea').style.display = 'block';
+                document.getElementById('precoUSD').textContent = 'US$ ' + cotacao.calculo.preco_usd.toFixed(2);
+                document.getElementById('precoBRL').textContent = 'R$ ' + cotacao.calculo.bruto_brl.toFixed(2);
+                document.getElementById('precoFinal').textContent = 'R$ ' + cotacao.calculo.preco_final.toFixed(2);
+                document.getElementById('precoTotal').textContent = 'R$ ' + cotacao.calculo.preco_total.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+
+                // Breakdown
+                document.getElementById('breakdownArea').style.display = 'block';
+                let breakdown = '';
+
+                // Composicao MPs
+                cotacao.composicao.forEach(mp => {
+                    breakdown += `<tr><td>${mp.mp} (${mp.pct}%)</td><td>US$ ${mp.contrib_usd.toFixed(2)}</td><td>Preco: US$ ${mp.preco_usd}/ton</td></tr>`;
+                });
+
+                breakdown += `<tr style="background:#f0f0f0"><td><b>Preco Base USD</b></td><td><b>US$ ${cotacao.calculo.preco_usd.toFixed(2)}</b></td><td>Soma MPs</td></tr>`;
+                breakdown += `<tr><td>Cambio</td><td>R$ ${cotacao.mercado.cambio.toFixed(4)}</td><td>USD/BRL</td></tr>`;
+                breakdown += `<tr style="background:#f0f0f0"><td><b>Preco Base BRL</b></td><td><b>R$ ${cotacao.calculo.bruto_brl.toFixed(2)}</b></td><td>Base x Cambio</td></tr>`;
+                breakdown += `<tr><td>Embalagem</td><td>R$ ${cotacao.calculo.embalagem.toFixed(2)}</td><td>${cotacaoReq.embalagem}</td></tr>`;
+                breakdown += `<tr><td>Ex-Factory</td><td>R$ ${cotacao.calculo.ex_factory.toFixed(2)}</td><td>Base + Embalagem</td></tr>`;
+                breakdown += `<tr><td>Frete</td><td>R$ ${cotacao.calculo.frete.toFixed(2)}</td><td>${cotacaoReq.distancia_km} km x R$ 0.19/km</td></tr>`;
+                breakdown += `<tr><td>CIF a Vista</td><td>R$ ${cotacao.calculo.cif_avista.toFixed(2)}</td><td>Ex-Factory + Frete</td></tr>`;
+                breakdown += `<tr><td>Fator Juros</td><td>${cotacao.calculo.fator_juros.toFixed(6)}</td><td>${cotacaoReq.dias_prazo} dias</td></tr>`;
+                breakdown += `<tr><td>CIF + Juros</td><td>R$ ${cotacao.calculo.cif_juros.toFixed(2)}</td><td>CIF x Fator</td></tr>`;
+                breakdown += `<tr><td>ICMS</td><td>${cotacao.calculo.icms_pct}%</td><td>Imposto estadual</td></tr>`;
+                breakdown += `<tr style="background:#e8f5e9"><td><b>Preco Final</b></td><td><b>R$ ${cotacao.calculo.preco_final.toFixed(2)}</b></td><td>Por tonelada</td></tr>`;
+                breakdown += `<tr style="background:#c8e6c9"><td><b>TOTAL</b></td><td><b>R$ ${cotacao.calculo.preco_total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</b></td><td>${cotacaoReq.quantidade_ton} toneladas</td></tr>`;
+
+                document.getElementById('breakdownTable').innerHTML = breakdown;
+
+                // Simulacao
+                document.getElementById('loading').style.display = 'block';
+
+                const embalagem = cotacaoReq.embalagem === 'GRANEL' ? 0 : (cotacaoReq.embalagem === 'BIGBAG' ? 78 : 100);
+                const simReq = {
+                    formula: cotacaoReq.formula,
+                    horizonte_meses: parseInt(document.getElementById('horizonte').value),
+                    n_simulacoes: 3000,
+                    embalagem: embalagem,
+                    distancia_km: cotacaoReq.distancia_km,
+                    dias_prazo: cotacaoReq.dias_prazo
+                };
+
+                const simRes = await fetch(API + '/api/simulacao', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(simReq)
+                });
+                const sim = await simRes.json();
+
+                // Fan chart
+                const x = Array.from({length: simReq.horizonte_meses + 1}, (_, i) => i);
+
+                Plotly.newPlot('fanchart', [
+                    {x: x.concat(x.slice().reverse()),
+                     y: sim.percentis.p95.concat(sim.percentis.p5.slice().reverse()),
+                     fill: 'toself', fillcolor: 'rgba(44,85,48,0.15)',
+                     line: {color: 'transparent'}, name: 'P5-P95', showlegend: false},
+                    {x: x.concat(x.slice().reverse()),
+                     y: sim.percentis.p75.concat(sim.percentis.p25.slice().reverse()),
+                     fill: 'toself', fillcolor: 'rgba(44,85,48,0.3)',
+                     line: {color: 'transparent'}, name: 'P25-P75', showlegend: false},
+                    {x: x, y: sim.percentis.p50, mode: 'lines',
+                     line: {color: '#2c5530', width: 2}, name: 'Mediana'}
+                ], {
+                    title: 'Projecao de Preco (R$/ton)',
+                    xaxis: {title: 'Meses'},
+                    yaxis: {title: 'R$/ton'},
+                    margin: {t: 40, r: 20},
+                    showlegend: false
+                });
+
+                // Histograma
+                const bins = sim.histograma.bins;
+                const counts = sim.histograma.counts;
+
+                Plotly.newPlot('histogram', [{
+                    x: bins.slice(0, -1).map((b, i) => (b + bins[i+1]) / 2),
+                    y: counts,
+                    type: 'bar',
+                    marker: {color: 'rgba(44,85,48,0.7)'}
+                }], {
+                    title: `Distribuicao em ${simReq.horizonte_meses} meses`,
+                    xaxis: {title: 'R$/ton'},
+                    yaxis: {title: 'Frequencia'},
+                    shapes: [
+                        {type: 'line', x0: sim.stats.p5, x1: sim.stats.p5, y0: 0, y1: 1, yref: 'paper',
+                         line: {color: 'green', dash: 'dash', width: 1}},
+                        {type: 'line', x0: sim.stats.media, x1: sim.stats.media, y0: 0, y1: 1, yref: 'paper',
+                         line: {color: '#2c5530', width: 2}},
+                        {type: 'line', x0: sim.stats.p95, x1: sim.stats.p95, y0: 0, y1: 1, yref: 'paper',
+                         line: {color: 'red', dash: 'dash', width: 1}}
+                    ],
+                    annotations: [
+                        {x: sim.stats.media, y: 1.05, yref: 'paper', text: `Media: R$${sim.stats.media.toFixed(0)}`, showarrow: false, font: {size: 10}}
+                    ],
+                    margin: {t: 40, r: 20}
+                });
+
+                document.getElementById('loading').style.display = 'none';
+
+            } catch (err) {
+                console.error(err);
+                alert('Erro: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Calcular';
+            }
+        }
+
+        // Calcular ao carregar
+        window.onload = calcular;
+    </script>
+</body>
+</html>
